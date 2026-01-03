@@ -9,6 +9,7 @@ and infers structural boundaries using N-gram value-stable anchors in header win
 import argparse
 import hashlib
 import json
+import math
 import os
 import platform
 import re
@@ -544,7 +545,7 @@ def compute_segment_stats(records_bytes: List[bytes], boundaries: List[int]) -> 
             for count in byte_counts.values():
                 p = count / total
                 if p > 0:
-                    entropy -= p * (p ** 0.5)  # Simplified entropy metric
+                    entropy -= p * math.log2(p)  # Shannon entropy
             
             entropies.append(entropy)
         
