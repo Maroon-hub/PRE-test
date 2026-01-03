@@ -153,16 +153,26 @@ def parse_follow_output(output: str, is_raw: bool) -> Dict[int, bytes]:
     ...
     
     Format for raw (similar but with raw ASCII in right column).
+    
+    Note: The actual format shows Node declarations first, then data for the
+    first direction starts. When a "Node X:\nNode Y:" line appears, it indicates
+    a direction switch.
     """
     directions = {}
-    current_dir = None
+    current_dir = 0  # Start with direction 0
     current_bytes = bytearray()
+    seen_data = False
     
-    for line in output.split('\n'):
+    lines = output.split('\n')
+    i = 0
+    
+    while i < len(lines):
+        line = lines[i]
         line_stripped = line.strip()
         
-        # Detect direction switch by looking for tab-indented hex lines
+        # Check for tab-indented hex data lines
         if line.startswith('\t') and len(line_stripped) > 8:
+            seen_data = True
             # Parse hex line: "00000000  48 65 6c 6c 6f ..."
             parts = line_stripped.split(None, 1)
             if len(parts) >= 2:
@@ -181,20 +191,23 @@ def parse_follow_output(output: str, is_raw: bool) -> Dict[int, bytes]:
                     if len(hb) == 2 and all(c in '0123456789abcdefABCDEF' for c in hb):
                         current_bytes.append(int(hb, 16))
         
-        # Detect direction by looking for "Node X:" lines
-        elif line_stripped.startswith('Node '):
-            # Save previous direction
-            if current_dir is not None and current_bytes:
-                directions[current_dir] = bytes(current_bytes)
-            
-            # Parse "Node 0:" or "Node 1:"
-            match = re.match(r'Node (\d):', line_stripped)
-            if match:
-                current_dir = int(match.group(1))
-                current_bytes = bytearray()
+        # Check for direction change: "Node X:\nNode Y:" pattern after data has started
+        elif line_stripped.startswith('Node ') and seen_data:
+            # Check if next line is also "Node X:"
+            if i + 1 < len(lines) and lines[i + 1].strip().startswith('Node '):
+                # Save current direction
+                if current_bytes:
+                    directions[current_dir] = bytes(current_bytes)
+                    current_bytes = bytearray()
+                
+                # Switch to next direction
+                current_dir = 1 if current_dir == 0 else 0
+                i += 1  # Skip the next "Node X:" line
+        
+        i += 1
     
     # Save final direction
-    if current_dir is not None and current_bytes:
+    if current_bytes:
         directions[current_dir] = bytes(current_bytes)
     
     return directions
